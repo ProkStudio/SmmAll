@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { buildRobokassaUrl } from "@/lib/payment";
+import { prismaDecimalToNumber } from "@/lib/prisma-decimal";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
@@ -19,14 +20,14 @@ export async function POST(req: Request) {
   const service = await prisma.service.findUnique({ where: { id: payload.serviceId } });
   if (!service) return NextResponse.json({ error: "Услуга не найдена" }, { status: 404 });
 
-  let amount = (Number(service.pricePer1000) / 1000) * payload.quantity;
+  let amount = (prismaDecimalToNumber(service.pricePer1000) / 1000) * payload.quantity;
   let promoCodeId: string | null = null;
   if (payload.promoCode) {
     const promo = await prisma.promoCode.findUnique({ where: { code: payload.promoCode } });
     if (promo?.isActive && (!promo.expiresAt || promo.expiresAt > new Date())) {
       promoCodeId = promo.id;
       if (promo.discountPct) amount = amount * (1 - promo.discountPct / 100);
-      if (promo.discountFixed) amount = Math.max(0, amount - Number(promo.discountFixed));
+      if (promo.discountFixed) amount = Math.max(0, amount - prismaDecimalToNumber(promo.discountFixed));
     }
   }
 

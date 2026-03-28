@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
 import { demoCategories, demoServices } from "@/lib/demo";
+import { prismaDecimalToNumber } from "@/lib/prisma-decimal";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -9,17 +10,25 @@ export default async function Home() {
   let dbReady = Boolean(process.env.DATABASE_URL) && !demoModeForced;
 
   let categories: Array<{ id: string; name: string; slug: string }> = demoCategories.slice(0, 8);
-  let popular: Array<{ id: string; name: string; description: string; pricePer1000: number | string; popularity?: number }> =
-    demoServices.slice().sort((a, b) => b.popularity - a.popularity).slice(0, 6);
+  type PopularItem = { id: string; name: string; description: string; pricePer1000: number; popularity?: number };
+  let popular: PopularItem[] = demoServices
+    .slice()
+    .sort((a, b) => b.popularity - a.popularity)
+    .slice(0, 6)
+    .map((s) => ({ ...s, pricePer1000: s.pricePer1000 }));
 
   if (dbReady) {
     try {
       categories = await prisma.category.findMany({ take: 8, select: { id: true, name: true, slug: true } });
-      popular = await prisma.service.findMany({
+      const rows = await prisma.service.findMany({
         take: 6,
         orderBy: { popularity: "desc" },
         select: { id: true, name: true, description: true, pricePer1000: true, popularity: true },
       });
+      popular = rows.map((s) => ({
+        ...s,
+        pricePer1000: prismaDecimalToNumber(s.pricePer1000),
+      }));
     } catch {
       dbReady = false;
     }
@@ -56,7 +65,7 @@ export default async function Home() {
             <Link key={item.id} href={`/services/${item.id}`} className="rounded-xl border bg-white p-4 shadow-sm">
               <h3 className="font-semibold">{item.name}</h3>
               <p className="mt-2 text-sm text-slate-500">{item.description.slice(0, 90)}</p>
-              <p className="mt-3 text-blue-600">{Number((item as { pricePer1000: unknown }).pricePer1000)} ₽ / 1000</p>
+              <p className="mt-3 text-blue-600">{item.pricePer1000} ₽ / 1000</p>
             </Link>
           ))}
         </div>
